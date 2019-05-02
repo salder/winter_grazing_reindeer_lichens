@@ -14,6 +14,42 @@ projSWEREF <- "+init=epsg:3006"
 
 
 
+###############################################################################################
+
+
+drop_cont<-function(form=form,data_use=dat_mod,fam="quasibinomial",method="REML")
+{
+  var_all<-as.character(attr(terms(form),"variables"))[-1]
+  response<-var_all[1]
+  predictors<-var_all[-1]
+  form0<-as.formula(paste(response,1,sep="~"))
+  fit0<-gam(form0,data=data_use,family=fam)#,method=method)
+  fit_tot<-gam(form,data=data_use,family=fam)#,method=method)
+  d0<-deviance(fit0)
+  d_tot<-deviance(fit_tot)
+  var_explain<-predictor_explain<-prop_var_explain<-NA
+  for (i in 1:length(predictors))
+  {
+    predictor_sub<-paste(predictors[-i],collapse="+")
+    form1<-as.formula(paste(response,predictor_sub,sep="~"))
+    fit_red<-gam(form1,data=data_use,family=fam,sp=fit_tot$sp[-i])#,method=method)
+    predictor_explain[i]<-predictors[i]
+    var_explain[i]<-(deviance(fit_red)-d_tot)/d0
+
+
+  }
+  prop_var_explain<-round(var_explain/sum(var_explain),3)
+  #prop_var_explain<-prop_var_explain[order(prop_var_explain[,3],decreasing = F),]
+  res<-data.frame(predictor_explain,var_explain,prop_var_explain)
+  #res_a<-res[order(res$prop_var_explain,decreasing=T),]
+  res<-list(fit_tot,summary(fit_tot),res)
+}
+
+
+###########################################################################################################
+
+
+
 #1. Satellit daten von drive runterladen und mergen
 
 
@@ -123,8 +159,89 @@ soil<-raster("M:/reindder_lichen_map/raster_files_combined/soil_lav_vinterbete.t
 
 
 
+#tax data -> update?
+tax.data<-read.csv("M:/Härjedalen/r_analysis/ud1846vegdata.csv",sep=";")
+tax_lav.data<-tax.data%>%filter(Tackningsart_latin=="Cladina spp.")
+tax_lav.sp<-SpatialPointsDataFrame(coords=tax_lav.data[,c("Ostkoordinat","Nordkoordinat")],data=tax_lav.data,proj4string=CRS(projSWEREF))
+# proj4string(hygge_new)<-projSWEREF
 
 
 
 
- 
+tax_lav.data$b2<-extract(b2,tax_lav.sp)
+tax_lav.data$b3<-extract(b3,tax_lav.sp)
+tax_lav.data$b4<-extract(b4,tax_lav.sp)
+tax_lav.data$b5<-extract(b5,tax_lav.sp)
+tax_lav.data$b6<-extract(b6,tax_lav.sp)
+tax_lav.data$b7<-extract(b7,tax_lav.sp)
+tax_lav.data$b8<-extract(b8,tax_lav.sp)
+tax_lav.data$b9<-extract(b9,tax_lav.sp)
+tax_lav.data$b10<-extract(b10,tax_lav.sp)
+tax_lav.data$b11<-extract(b11,tax_lav.sp)
+tax_lav.data$b12<-extract(b12,tax_lav.sp)
+tax_lav.data$gndvi<-extract(gndvi,tax_lav.sp)
+tax_lav.data$ndci<-extract(ndci,tax_lav.sp)
+tax_lav.data$ndvi<-extract(ndvi,tax_lav.sp)
+tax_lav.data$ndwi<-extract(ndwi,tax_lav.sp)
+tax_lav.data$savi<-extract(savi,tax_lav.sp)
+tax_lav.data$sipi<-extract(sipi,tax_lav.sp)
+tax_lav.data$soil<-extract(soil,tax_lav.sp)
+
+
+#correlation??
+library(usdm)
+predictors<-tax_lav.data%>%select(b3
+                                      ,b4
+                                      ,b5
+                                      ,b6
+                                      ,b7
+                                      ,b8
+                                      ,b9
+                                      ,b10
+                                      ,b11
+                                      ,b12
+                                      ,ndvi   
+                                      ,gndvi
+                                      ,ndci
+                                      ,ndwi
+                                      ,savi
+                                      ,sipi
+                                      ,soil)
+                                      
+predictors<-na.omit(predictors)                                     
+vif(predictors)
+vifcor(predictors,th=0.8)
+vifstep(predictors)
+
+library(mgcv)
+
+form<-as.formula(Tackningsarea/100~s(b2)
+                 +s(b3)
+                 +s(b4)
+                 +s(b5)
+                 +s(b6)
+                 +s(b7)
+                 +s(b8)
+                 +s(b9)
+                 +s(b10)
+                 +s(b11)
+                 +s(b12)
+                 +s(gndvi)
+                 +s(ndci)
+                 +s(ndwi)
+                 +s(savi)
+                 +s(sipi)
+                 +s(soil)
+                 +s(ndvi)
+                 
+                  )
+
+fit<-gam(form,data= tax_lav.data,"quasibinomial",method="GCV.Cp") 
+summary(fit)
+gam.check(fit)
+plot(fit,pages=1,shade=T,scale=F)
+
+dropvar_all<-drop_cont(form,tax_lav.data,method="GCV.Cp",fam="quasibinomial")
+dropvar_all
+
+
