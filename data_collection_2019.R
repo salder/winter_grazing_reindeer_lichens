@@ -9,6 +9,7 @@ library(dplyr)
 library(rgdal)
 
 rasterOptions(tmpdir="L:/DATA/temp_raster/")
+rasterOptions(tmpdir="//YKSI/13_Geodata/RBP_vinterbete_lavmodel/raster_temp/")
 projRT90 <- "+init=epsg:3021 +towgs84=414.0978567149,41.3381489658,603.0627177516,-0.8550434314,2.1413465,-7.0227209516,0 +no_defs"
 projSWEREF <- "+init=epsg:3006"
 
@@ -228,7 +229,7 @@ form<-as.formula(Tackningsarea/100~s(b2)
                  +s(b12)
                  +s(gndvi)
                  +s(ndci)
-                 +s(ndwi)
+                +s(ndwi)
                  +s(savi)
                  +s(sipi)
                  +s(soil)
@@ -236,7 +237,7 @@ form<-as.formula(Tackningsarea/100~s(b2)
                  
                   )
 
-fit<-gam(form,data= tax_lav.data,"quasibinomial",method="GCV.Cp") 
+fit.lav<-gam(form,data= tax_lav.data,"quasibinomial",method="GCV.Cp") 
 summary(fit)
 gam.check(fit)
 plot(fit,pages=1,shade=T,scale=F)
@@ -286,7 +287,7 @@ soil_r<-raster("M:/reindder_lichen_map/raster_files_combined/soil_lav_vinterbete
 x<-extent(b2_r)
 dif<-(x[4]-x[3])/40
 
-for (i in 1:20)
+for (i in 28:40)
 {   
 e1<-extent(x[1],x[2],x[3]+(i-1)*dif,x[3]+i*dif)
 
@@ -312,6 +313,27 @@ soil<-crop(soil_r,e1)
 pred.brick<-brick(b2,b3,b4,b5,b6,b7,b8,b9,b10,b11,b12,gndvi,ndci,ndvi,ndwi,savi,sipi,soil)
 names(pred.brick)<-c("b2","b3","b4","b5","b6","b7","b8","b9","b10","b11","b12","gndvi","ndci","ndvi","ndwi","savi","sipi","soil")
 f_name<-paste("L:/Geo-Data/Satellit_vinterlav/vinterbete_block_",i,".rds",sep="")
-writeRDS(pred.brick,file=f_name)
+saveRDS(pred.brick,file=f_name)
 }
 
+
+
+
+file.list<-dir("L:/Geo-Data/Satellit_vinterlav")
+
+for (i in 1:30)
+{file.rds<-paste("L:/Geo-Data/Satellit_vinterlav/",file.list[i],sep="")
+pred.brick<-readRDS(file.rds)
+names(pred.brick)<-c("b2","b3","b4","b5","b6","b7","b8","b9","b10","b11","b12","gndvi","ndci","ndvi","ndwi","savi","sipi","soil")
+
+beginCluster(n=6)
+x1<-clusterR(pred.brick,predict,args=list(fit.lav,type="response"))
+endCluster()
+t1<-getValues(x1)
+t1<-ifelse(t1>0.9,NA,t1)
+t1<-ifelse(t1>0.7,0.7,t1)
+t1<-trunc(t1*100,0)
+x1<-setValues(x1,t1)
+save.file<-paste("//YKSI/13_Geodata/RBP_vinterbete_lavmodel/raster_prediction/lav_vinterbete_del_",i,".tif")
+writeRaster(x1, filename=save.file, format="GTiff", overwrite=TRUE,datatype="FLT4S") 
+}
